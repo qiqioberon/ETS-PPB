@@ -1,97 +1,108 @@
-package com.example.dailytaskmanager // Ganti dengan package name Anda
+package com.example.dailytaskmanager
 
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import java.time.LocalDateTime
+import java.util.Comparator
 import java.util.UUID
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.derivedStateOf
 
-// Enum untuk tipe penyortiran
 enum class SortType {
-    NONE, DEADLINE, STATUS
+    NONE, DEADLINE
 }
 
 class TaskViewModel : ViewModel() {
 
-    // Daftar tugas yang akan diobservasi oleh Compose
-    // Menggunakan mutableStateListOf agar perubahan pada list (add/remove) memicu recomposition
-    val tasks = mutableStateListOf<Task>()
+    private val _tasks = mutableStateListOf<Task>()
+    // Expose _tasks langsung jika UI perlu list mentah, atau tidak sama sekali
+    // Jika UI hanya butuh pending/completed, _tasks bisa private total.
 
-    // State untuk mengontrol visibilitas dialog tambah tugas
-    var showAddTaskDialog by mutableStateOf(false)
-        private set // Hanya bisa diubah dari dalam ViewModel
-
-    // State untuk tipe penyortiran saat ini
+    // State sortir
     var currentSortType by mutableStateOf(SortType.NONE)
         private set
+    var sortDeadlineAscending by mutableStateOf(true)
+        private set
 
-
-
-    // Contoh data awal (opsional)
-    init {
-        // Tambahkan beberapa contoh tugas jika perlu untuk testing awal
-        // tasks.addAll(listOf(
-        //     Task(title = "Belajar Compose", deadline = LocalDateTime.now().plusDays(1)),
-        //     Task(title = "Beli Susu", deadline = LocalDateTime.now().plusHours(2), isCompleted = true),
-        //     Task(title = "Olahraga", deadline = null)
-        // ))
+    // derivedStateOf yang melakukan filter DAN sort
+    val pendingTasksState: State<List<Task>> = derivedStateOf {
+        val filtered = _tasks.filter { !it.isCompleted }
+        applySortingLogic(filtered) // Terapkan sorting ke hasil filter
+    }
+    val completedTasksState: State<List<Task>> = derivedStateOf {
+        val filtered = _tasks.filter { it.isCompleted }
+        applySortingLogic(filtered) // Terapkan sorting ke hasil filter
     }
 
-    // Properti terhitung untuk jumlah tugas
-    val totalTasks: Int by derivedStateOf { tasks.size }
-    val completedTasksCount: Int by derivedStateOf { tasks.count { it.isCompleted } }
+    var showAddTaskDialog by mutableStateOf(false)
+        private set
+
+    // Properti terhitung tetap sama
+    val totalTasks: Int by derivedStateOf { _tasks.size }
+    val completedTasksCount: Int by derivedStateOf { _tasks.count { it.isCompleted } }
+
+    // --- Fungsi Modifikasi State ---
+    // Hanya memodifikasi state dasar (_tasks atau state sortir)
 
     fun addTask(title: String, deadline: LocalDateTime?) {
-        if (title.isNotBlank()) { // Hanya tambah jika judul tidak kosong
+        if (title.isNotBlank()) {
             val newTask = Task(title = title, deadline = deadline)
-            tasks.add(newTask)
+            _tasks.add(newTask) // Cukup tambahkan, derivedStateOf akan handle sisanya
         }
-        closeAddTaskDialog() // Tutup dialog setelah menambahkan
+        closeAddTaskDialog()
     }
 
     fun removeTask(taskId: UUID) {
-        tasks.removeAll { it.id == taskId }
+        _tasks.removeAll { it.id == taskId } // derivedStateOf akan handle sisanya
     }
 
     fun toggleTaskStatus(taskId: UUID) {
-        val taskIndex = tasks.indexOfFirst { it.id == taskId }
+        val taskIndex = _tasks.indexOfFirst { it.id == taskId }
         if (taskIndex != -1) {
-            val task = tasks[taskIndex]
-            // Buat salinan task dengan status terbalik dan ganti di list
-            // Ini penting agar Compose mendeteksi perubahan state pada item
-            tasks[taskIndex] = task.copy(isCompleted = !task.isCompleted)
+            val task = _tasks[taskIndex]
+            // Modifikasi langsung di SnapshotStateList akan memicu derivedStateOf
+            _tasks[taskIndex] = task.copy(isCompleted = !task.isCompleted)
         }
     }
 
-    fun sortTasks(sortType: SortType) {
-        currentSortType = sortType
-        // Penyortiran dilakukan langsung pada mutableStateListOf
-        // atau bisa juga menggunakan derived state di UI jika lebih kompleks
-        when (sortType) {
+    fun toggleDeadlineSort() {
+        if (currentSortType == SortType.DEADLINE) {
+            sortDeadlineAscending = !sortDeadlineAscending
+        } else {
+            currentSortType = SortType.DEADLINE
+            sortDeadlineAscending = true
+        }
+        // Perubahan state sort akan memicu derivedStateOf
+    }
+
+    fun clearSort() {
+        currentSortType = SortType.NONE
+        sortDeadlineAscending = true
+        // Perubahan state sort akan memicu derivedStateOf
+    }
+
+    // --- Helper Function untuk Logika Sorting (hanya dipanggil oleh derivedStateOf) ---
+    private fun applySortingLogic(listToSort: List<Task>): List<Task> {
+        return when (currentSortType) {
             SortType.DEADLINE -> {
-                // Sortir berdasarkan deadline (nulls last), lalu berdasarkan judul
-                tasks.sortBy { it.deadline ?: LocalDateTime.MAX } // Taruh yang null di akhir
-            }
-            SortType.STATUS -> {
-                // Sortir berdasarkan status (belum selesai dulu), lalu deadline
-                tasks.sortWith(compareBy<Task> { it.isCompleted }.thenBy { it.deadline ?: LocalDateTime.MAX })
+                val comparator = compareBy<Task, LocalDateTime?>(nullsLast(Comparator.naturalOrder())) { it.deadline }
+                if (sortDeadlineAscending) {
+                    listToSort.sortedWith(comparator)
+                } else {
+                    listToSort.sortedWith(comparator.reversed())
+                }
             }
             SortType.NONE -> {
-                // Mungkin kembali ke urutan penambahan atau urutan default lain
-                // Untuk kesederhanaan, kita bisa biarkan seperti terakhir disortir
-                // atau implementasikan cara mengembalikan ke urutan asli jika perlu
+                // Ketika tidak ada sort, kita mungkin ingin urutan penambahan asli
+                // Namun, karena kita memfilter, urutan asli hilang. ID bisa jadi proxy.
+                listToSort.sortedBy { it.id.toString() }
             }
         }
     }
 
-    fun openAddTaskDialog() {
-        showAddTaskDialog = true
-    }
-
-    fun closeAddTaskDialog() {
-        showAddTaskDialog = false
-    }
+    fun openAddTaskDialog() { showAddTaskDialog = true }
+    fun closeAddTaskDialog() { showAddTaskDialog = false }
 }

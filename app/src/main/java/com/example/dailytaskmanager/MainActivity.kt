@@ -32,10 +32,18 @@ import java.util.UUID
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape // Import untuk rounded shape
-import androidx.compose.material.icons.automirrored.filled.Sort // Import Sort
-import androidx.compose.animation.AnimatedVisibility // Import untuk collapse/expand
-import androidx.compose.foundation.clickable // Import clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.Sort // Tetap import jika ikon sort masih relevan
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.DeleteOutline // Import ikon hapus
+import androidx.compose.material.icons.filled.ArrowDownward // Import ikon panah bawah
+import androidx.compose.material.icons.filled.ArrowUpward // Import ikon panah atas
+import androidx.compose.material.icons.filled.CheckCircleOutline // Hapus jika tidak dipakai
+import androidx.compose.material.icons.filled.Clear // Import ikon clear
+import androidx.compose.material.icons.filled.DateRange // Import ikon tanggal
+import androidx.compose.material.icons.filled.Sort // Import ikon sort (jika ingin dipakai di tombol utama)
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,7 +56,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- Helper Function untuk Format Tanggal ---
+// --- Helper Function untuk Format Tanggal (Tidak Berubah) ---
 fun formatDeadlineRelative(deadline: LocalDateTime?, today: LocalDate = LocalDate.now()): String {
     if (deadline == null) return "" // Atau "No deadline"
 
@@ -70,66 +78,72 @@ fun formatDeadlineRelative(deadline: LocalDateTime?, today: LocalDate = LocalDat
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskAppScreen(taskViewModel: TaskViewModel = viewModel()) {
-    // State untuk mengontrol visibilitas bagian 'Completed'
     var showCompletedTasks by rememberSaveable { mutableStateOf(true) }
 
-    // Pisahkan tugas menjadi pending dan completed
-    // Kita tidak butuh sortedTasks lagi karena pemisahan sudah dilakukan
-    val allTasks = taskViewModel.tasks.toList() // Ambil snapshot list saat ini
-    val pendingTasks = remember(allTasks) { allTasks.filter { !it.isCompleted } }
-    val completedTasks = remember(allTasks) { allTasks.filter { it.isCompleted } }
+    // Baca state dari ViewModel
+    val pendingTasks by taskViewModel.pendingTasksState
+    val completedTasks by taskViewModel.completedTasksState
 
     Scaffold(
-        // Tidak ada TopAppBar di UI target
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { taskViewModel.openAddTaskDialog() },
-                // Warna FAB sesuai gambar
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
-                    Icons.Filled.Add,
+                    Icons.Filled.Add, // Gunakan ikon Add
                     contentDescription = "Add Task",
-                    tint = MaterialTheme.colorScheme.onPrimary // Warna ikon di FAB
+                    tint = MaterialTheme.colorScheme.onPrimary
                 )
             }
         },
-        containerColor = MaterialTheme.colorScheme.surface // Warna background utama
+        containerColor = MaterialTheme.colorScheme.surface
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues) // Terapkan padding dari Scaffold
-                .padding(horizontal = 16.dp), // Padding horizontal utama
-            verticalArrangement = Arrangement.spacedBy(12.dp), // Jarak antar elemen utama
-            contentPadding = PaddingValues(bottom = 80.dp) // Padding bawah agar tidak tertutup FAB
-        ) {
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 80.dp)
+        )  {
             // 1. Header Card
             item {
-                Spacer(modifier = Modifier.height(8.dp)) // Jarak dari atas
+                Spacer(modifier = Modifier.height(8.dp))
                 HeaderCard(
                     completedCount = taskViewModel.completedTasksCount,
                     totalCount = taskViewModel.totalTasks,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(16.dp)) // Jarak setelah header
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // --- Tombol Sortir ---
+            item {
+                SortControls(
+                    currentSortType = taskViewModel.currentSortType,
+                    isAscending = taskViewModel.sortDeadlineAscending, // Kirim state arah sortir
+                    onToggleDeadlineSort = { taskViewModel.toggleDeadlineSort() }, // Panggil fungsi toggle
+                    onClearSort = { taskViewModel.clearSort() } // Panggil fungsi clear
+                )
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             // 2. Section "Task" (Pending)
             item {
                 TaskListSectionHeader(
                     title = "Task",
-                    showSeeAll = true, // Tampilkan "See all"
-                    onSeeAllClick = { /* TODO: Implement See All logic */ }
+                    // Hapus showSeeAll dan onSeeAllClick
+                    showSeeAll = false
                 )
-                Spacer(modifier = Modifier.height(8.dp)) // Jarak setelah header section
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             // Daftar Task Pending
             if (pendingTasks.isEmpty()) {
                 item {
                     Text(
-                        "No pending tasks for today!",
+                        "No pending tasks!", // Ubah pesan
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 16.dp, horizontal = 8.dp)
@@ -140,7 +154,7 @@ fun TaskAppScreen(taskViewModel: TaskViewModel = viewModel()) {
                     TaskListItem(
                         task = task,
                         onCheckedChange = { taskViewModel.toggleTaskStatus(task.id) },
-                        // onDelete = { taskViewModel.removeTask(task.id) } // Hapus jika tidak ingin ada aksi delete langsung
+                        onDelete = { taskViewModel.removeTask(task.id) }
                     )
                 }
             }
@@ -148,21 +162,19 @@ fun TaskAppScreen(taskViewModel: TaskViewModel = viewModel()) {
 
             // 3. Section "Completed"
             item {
-                Spacer(modifier = Modifier.height(16.dp)) // Jarak sebelum Completed
+                Spacer(modifier = Modifier.height(16.dp))
                 TaskListSectionHeader(
                     title = "Completed",
                     isExpanded = showCompletedTasks,
-                    onToggleExpand = { showCompletedTasks = !showCompletedTasks }, // Toggle state
-                    showSeeAll = false // Tidak ada "See all" di Completed
+                    onToggleExpand = { showCompletedTasks = !showCompletedTasks },
+                    showSeeAll = false // Pastikan tidak ada "See all" di Completed
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
             // Daftar Task Completed (Muncul/Hilang berdasarkan state)
-            // Pakai AnimatedVisibility untuk animasi collapse/expand
-            item { // Bungkus items dalam satu item LazyColumn agar animasi bekerja
+            item {
                 AnimatedVisibility(visible = showCompletedTasks) {
-                    // Gunakan Column di dalam AnimatedVisibility jika items dipanggil di sini
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (completedTasks.isEmpty()) {
                             Text(
@@ -172,11 +184,12 @@ fun TaskAppScreen(taskViewModel: TaskViewModel = viewModel()) {
                                 modifier = Modifier.padding(vertical = 16.dp, horizontal = 8.dp)
                             )
                         } else {
+                            // Gunakan forEach pada list completedTasks
                             completedTasks.forEach { task ->
                                 TaskListItem(
                                     task = task,
                                     onCheckedChange = { taskViewModel.toggleTaskStatus(task.id) },
-                                    // onDelete = { taskViewModel.removeTask(task.id) }
+                                    onDelete = { taskViewModel.removeTask(task.id) }
                                 )
                             }
                         }
@@ -186,7 +199,7 @@ fun TaskAppScreen(taskViewModel: TaskViewModel = viewModel()) {
         } // Akhir LazyColumn
     }
 
-    // AddTaskDialog tetap sama
+    // AddTaskDialog (Tidak Berubah)
     if (taskViewModel.showAddTaskDialog) {
         AddTaskDialog(
             onDismiss = { taskViewModel.closeAddTaskDialog() },
@@ -197,80 +210,126 @@ fun TaskAppScreen(taskViewModel: TaskViewModel = viewModel()) {
     }
 }
 
-
-// --- Composable Baru: Header Card ---
+// --- Composable untuk Tombol Sortir ---
 @Composable
-fun HeaderCard(
-    completedCount: Int,
-    totalCount: Int,
+fun SortControls(
+    currentSortType: SortType,
+    isAscending: Boolean, // Menerima status arah sortir
+    onToggleDeadlineSort: () -> Unit, // Callback untuk toggle deadline sort
+    onClearSort: () -> Unit, // Callback untuk clear sort
     modifier: Modifier = Modifier
 ) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), // Rata kanan
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Tombol Sortir Deadline (Satu-satunya tombol sortir utama)
+        Button(
+            onClick = onToggleDeadlineSort, // Panggil toggle saat diklik
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), // Sesuaikan padding
+            // Tombol akan selalu aktif jika bisa diklik, beri visual berbeda jika sorting aktif
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (currentSortType == SortType.DEADLINE) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = if (currentSortType == SortType.DEADLINE) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        ) {
+            Icon(
+                Icons.Default.DateRange, // Ikon kalender tetap
+                contentDescription = "Sort by Deadline",
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("Deadline")
+            // Tambahkan ikon panah untuk menunjukkan arah sortir HANYA jika sorting deadline aktif
+            if (currentSortType == SortType.DEADLINE) {
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector = if (isAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                    contentDescription = if (isAscending) "Ascending" else "Descending",
+                    modifier = Modifier.size(16.dp) // Buat ikon panah sedikit lebih kecil
+                )
+            }
+        }
+
+        // Tombol untuk menghapus sorting (Hanya muncul jika sorting aktif)
+        if (currentSortType != SortType.NONE) {
+            IconButton(onClick = onClearSort) { // Panggil clear sort
+                Icon(Icons.Default.Clear, contentDescription = "Clear Sort")
+            }
+        }
+    }
+}
+
+
+
+// --- Header Card (Tidak Berubah) ---
+@Composable
+fun HeaderCard(completedCount: Int, totalCount: Int, modifier: Modifier = Modifier) {
+    // ... (kode sama seperti sebelumnya) ...
     val today = LocalDate.now()
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("d MMM yyyy") } // Format: 23 Mar 2021
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("d MMM yyyy") }
 
     Card(
-        modifier = modifier.height(IntrinsicSize.Min), // Agar Card menyesuaikan tinggi konten
-        shape = RoundedCornerShape(16.dp), // Sudut melengkung
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary), // Warna biru
+        modifier = modifier.height(IntrinsicSize.Min),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically // Pusatkan item secara vertikal
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Kolom untuk Ikon dan Tanggal
                 Column(modifier = Modifier.weight(1f)) {
                     Icon(
-                        imageVector = Icons.Filled.TaskAlt, // Ikon mirip di gambar
+                        imageVector = Icons.Filled.TaskAlt,
                         contentDescription = "Tasks Overview",
-                        tint = MaterialTheme.colorScheme.onPrimary, // Warna putih
-                        modifier = Modifier.size(48.dp) // Ukuran ikon
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(48.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Today, ${today.format(dateFormatter)}",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onPrimary // Warna putih
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
-                // Teks Jumlah Tugas (di kanan atas) - Kita letakkan saja di sini
                 Text(
                     text = "$completedCount/$totalCount",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f), // Sedikit transparan
-                    modifier = Modifier.align(Alignment.Top) // Align ke atas Row
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
+                    modifier = Modifier.align(Alignment.Top)
                 )
             }
         }
     }
 }
 
-// --- Composable Baru: Header Section List ---
+// --- Header Section List (Parameter showSeeAll tidak lagi relevan untuk section Task) ---
 @Composable
 fun TaskListSectionHeader(
     title: String,
     modifier: Modifier = Modifier,
-    isExpanded: Boolean? = null, // Nullable jika tidak ada expand/collapse
-    onToggleExpand: (() -> Unit)? = null, // Callback untuk toggle
-    showSeeAll: Boolean = false,
-    onSeeAllClick: (() -> Unit)? = null
+    isExpanded: Boolean? = null,
+    onToggleExpand: (() -> Unit)? = null,
+    showSeeAll: Boolean = false, // Pertahankan parameter ini untuk fleksibilitas, tapi panggilannya disesuaikan
+    onSeeAllClick: (() -> Unit)? = null // Pertahankan parameter ini
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween // Agar title dan tombol terpisah
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface // Warna teks judul section
+                color = MaterialTheme.colorScheme.onSurface
             )
-            // Tampilkan tombol expand/collapse jika ada state-nya
             if (isExpanded != null && onToggleExpand != null) {
                 IconButton(onClick = onToggleExpand, modifier = Modifier.size(32.dp)) {
                     Icon(
@@ -281,7 +340,7 @@ fun TaskListSectionHeader(
                 }
             }
         }
-
+        // Logika "See all" tetap ada di sini, tapi panggilannya di TaskAppScreen yang mengontrol
         if (showSeeAll && onSeeAllClick != null) {
             TextButton(onClick = onSeeAllClick) {
                 Text("See all", fontWeight = FontWeight.Medium)
@@ -291,50 +350,63 @@ fun TaskListSectionHeader(
 }
 
 
-// --- Modifikasi Composable TaskItem ---
+// --- Modifikasi Composable TaskItem untuk menambahkan Tombol Hapus ---
 @Composable
 fun TaskListItem(
     task: Task,
     onCheckedChange: (Boolean) -> Unit,
+    onDelete: () -> Unit, // Tambahkan callback untuk hapus
     modifier: Modifier = Modifier
-    // onDelete: () -> Unit, // Hapus jika tidak perlu
 ) {
-    // Warna latar belakang Card item
-    val cardContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh // Warna lebih terang dari background utama
+    val cardContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp)) // Clip agar clickable mengikuti shape
-            .clickable { onCheckedChange(!task.isCompleted) }, // Klik di mana saja pada Card untuk toggle
+            .clip(RoundedCornerShape(12.dp)), // Hapus clickable di sini agar tombol hapus bisa diklik
+        // .clickable { onCheckedChange(!task.isCompleted) }, // Pindahkan clickable ke Row atau Box jika perlu area klik lebih luas selain Checkbox
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = cardContainerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // Tanpa shadow atau sedikit
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp) // Sedikit elevasi
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 10.dp) // Padding dalam Card item
+                //.clickable { onCheckedChange(!task.isCompleted) } // Klik Row untuk toggle status
+                .padding(horizontal = 12.dp, vertical = 10.dp)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Checkbox (tampilannya akan standar M3)
             Checkbox(
                 checked = task.isCompleted,
-                onCheckedChange = null, // Aksi sudah ditangani oleh Card.clickable
-                modifier = Modifier.size(24.dp) // Sesuaikan ukuran jika perlu
-                // colors = CheckboxDefaults.colors(...) // Bisa kustomisasi warna jika mau
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier.size(24.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = task.title,
-                    style = MaterialTheme.typography.bodyLarge, // Ukuran teks judul task
+                    style = MaterialTheme.typography.bodyLarge,
                     textDecoration = if (task.isCompleted) TextDecoration.LineThrough else null,
-                    color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface // Redup jika selesai
+                    color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                 )
-                // Tampilkan deadline jika ada
-                val deadlineText = formatDeadlineRelative(task.deadline)
-                if (deadlineText.isNotEmpty()) {
+                // --- Logika Tampilan Deadline Diperbarui ---
+                val relativeDateText = formatDeadlineRelative(task.deadline) // Dapat "Today", "Tomorrow", "Mar 23", dll.
+
+                // Buat teks display final
+                val deadlineDisplay = if (task.deadline != null && relativeDateText.isNotEmpty()) {
+                    // Jika ada deadline dan teks tanggal relatif tidak kosong
+                    // Format waktu menggunakan Localized Short format (mis: 10:30 AM / 14:00)
+                    val timeFormatter = remember { DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT) }
+                    val timeText = task.deadline.toLocalTime().format(timeFormatter) // Ambil hanya bagian waktu
+
+                    // Gabungkan tanggal relatif dan waktu
+                    "$relativeDateText at $timeText"
+                } else {
+                    // Jika tidak ada deadline atau teks tanggal kosong, tampilkan apa adanya
+                    relativeDateText
+                }
+                // Hanya tampilkan baris deadline jika ada teks untuk ditampilkan
+                if (deadlineDisplay.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -345,228 +417,119 @@ fun TaskListItem(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = deadlineText,
+                            text = deadlineDisplay, // Gunakan teks yang sudah digabung/relatif
                             style = MaterialTheme.typography.bodySmall, // Ukuran teks kecil
                             color = MaterialTheme.colorScheme.onSurfaceVariant // Warna teks deadline
                         )
                     }
                 }
             }
-            // Hapus IconButton Delete dari sini jika tidak ada di UI target
-            // Spacer(modifier = Modifier.width(8.dp))
-            // IconButton(onClick = onDelete) {
-            //     Icon(
-            //         Icons.Filled.DeleteOutline,
-            //         contentDescription = "Delete Task",
-            //         tint = MaterialTheme.colorScheme.error
-            //     )
-            // }
+            // Tambahkan Tombol Hapus (IconButton)
+            Spacer(modifier = Modifier.width(8.dp)) // Jarak sebelum tombol hapus
+            IconButton(
+                onClick = onDelete, // Panggil callback onDelete saat diklik
+                modifier = Modifier.size(40.dp) // Ukuran area klik tombol
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.DeleteOutline, // Gunakan ikon hapus
+                    contentDescription = "Delete Task",
+                    tint = MaterialTheme.colorScheme.error // Warna merah untuk indikasi hapus
+                )
+            }
         }
     }
 }
 
-// --- AddTaskDialog, TimePickerDialog, SortMenu (Tidak Berubah) ---
-// (Salin kode AddTaskDialog, TimePickerDialog, dan SortMenu dari jawaban sebelumnya)
-// Catatan: SortMenu tidak digunakan lagi karena tidak ada TopAppBar, Anda bisa menghapusnya
-// atau mengintegrasikannya di tempat lain jika perlu sorting.
 
+// --- AddTaskDialog (Tidak Berubah) ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskDialog(
     onDismiss: () -> Unit,
     onAddTask: (String, LocalDateTime?) -> Unit
 ) {
-    // ... (Kode AddTaskDialog tetap sama dari jawaban sebelumnya) ...
+    // ... (kode sama seperti sebelumnya) ...
     var title by rememberSaveable { mutableStateOf("") }
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     var selectedTime by remember { mutableStateOf<LocalTime?>(null) }
-
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
-
     val datePickerState = rememberDatePickerState()
     val timePickerState = rememberTimePickerState()
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Tambah Tugas Baru") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Judul Tugas") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Deadline (Opsional):")
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Tambah Tugas Baru") }, text = {
+        Column {
+            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Judul Tugas") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Deadline (Opsional):")
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { showDatePicker = true }) {
+                    Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(selectedDate?.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)) ?: "Pilih Tanggal")
+                }
+                OutlinedButton(onClick = { showTimePicker = true }, enabled = selectedDate != null) {
+                    Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(selectedTime?.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)) ?: "Pilih Waktu")
+                }
+            }
+            if (selectedDate != null || selectedTime != null) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(onClick = { showDatePicker = true }) {
-                        Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(selectedDate?.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)) ?: "Pilih Tanggal")
-                    }
-                    OutlinedButton(
-                        onClick = { showTimePicker = true },
-                        enabled = selectedDate != null
-                    ) {
-                        Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(selectedTime?.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)) ?: "Pilih Waktu")
-                    }
-                }
-                if (selectedDate != null || selectedTime != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(onClick = {
-                        selectedDate = null
-                        selectedTime = null
-                        datePickerState.selectedDateMillis = null
-                    }) {
-                        Text("Hapus Deadline")
-                    }
-                }
-
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val deadline = if (selectedDate != null) {
-                        LocalDateTime.of(selectedDate!!, selectedTime ?: LocalTime.MIDNIGHT)
-                    } else {
-                        null
-                    }
-                    onAddTask(title, deadline)
-                    title = ""
-                    selectedDate = null
-                    selectedTime = null
-                },
-                enabled = title.isNotBlank()
-            ) {
-                Text("Tambah")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Batal")
+                TextButton(onClick = {
+                    selectedDate = null; selectedTime = null; datePickerState.selectedDateMillis = null
+                }) { Text("Hapus Deadline") }
             }
         }
-    )
-
+    }, confirmButton = {
+        Button(onClick = {
+            val deadline = if (selectedDate != null) LocalDateTime.of(selectedDate!!, selectedTime ?: LocalTime.MIDNIGHT) else null
+            onAddTask(title, deadline); title = ""; selectedDate = null; selectedTime = null
+        }, enabled = title.isNotBlank()) { Text("Tambah") }
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } })
     if (showDatePicker) {
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDatePicker = false
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            selectedDate = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                        }
-                    }
-                ) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Batal") }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
+        DatePickerDialog(onDismissRequest = { showDatePicker = false }, confirmButton = {
+            TextButton(onClick = {
+                showDatePicker = false; datePickerState.selectedDateMillis?.let { selectedDate = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
+            }) { Text("OK") }
+        }, dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Batal") } }) { DatePicker(state = datePickerState) }
     }
-
-    if (showTimePicker) {
-        TimePickerDialog(
-            onDismissRequest = { showTimePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        selectedTime = LocalTime.of(timePickerState.hour, timePickerState.minute)
-                        showTimePicker = false
-                    }
-                ) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) { Text("Batal") }
-            }
-        ) {
-            TimePicker(state = timePickerState)
-        }
+    if (showTimePicker) { TimePickerDialog(onDismissRequest = { showTimePicker = false }, confirmButton = {
+        TextButton(onClick = { selectedTime = LocalTime.of(timePickerState.hour, timePickerState.minute); showTimePicker = false }) { Text("OK") }
+    }, dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Batal") } }) { TimePicker(state = timePickerState) }
     }
 }
 
+// --- TimePickerDialog (Tidak Berubah) ---
 @Composable
-fun TimePickerDialog(
-    title: String = "Pilih Waktu",
-    onDismissRequest: () -> Unit,
-    confirmButton: @Composable (() -> Unit),
-    dismissButton: @Composable (() -> Unit)? = null,
-    content: @Composable () -> Unit,
-) {
-    // ... (Kode TimePickerDialog tetap sama dari jawaban sebelumnya) ...
-    Dialog(
-        onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Surface(
-            shape = MaterialTheme.shapes.extraLarge,
-            tonalElevation = 6.dp,
-            modifier = Modifier
-                .width(IntrinsicSize.Min)
-                .height(IntrinsicSize.Min)
-                .background(
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.surface
-                ),
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 20.dp),
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium
-                )
+fun TimePickerDialog(title: String = "Pilih Waktu", onDismissRequest: () -> Unit, confirmButton: @Composable (() -> Unit), dismissButton: @Composable (() -> Unit)? = null, content: @Composable () -> Unit) {
+    // ... (kode sama seperti sebelumnya) ...
+    Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 6.dp, modifier = Modifier.width(IntrinsicSize.Min).height(IntrinsicSize.Min).background(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface)) {
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp), text = title, style = MaterialTheme.typography.labelMedium)
                 content()
-                Row(
-                    modifier = Modifier
-                        .height(40.dp)
-                        .fillMaxWidth()
-                ) {
-                    Spacer(modifier = Modifier.weight(1f))
-                    dismissButton?.invoke()
-                    confirmButton()
-                }
+                Row(modifier = Modifier.height(40.dp).fillMaxWidth()) { Spacer(modifier = Modifier.weight(1f)); dismissButton?.invoke(); confirmButton() }
             }
         }
     }
 }
 
-// --- Preview ---
-@Preview(showBackground = true, widthDp = 360, backgroundColor = 0xFFF0F0F0) // Latar belakang preview abu-abu
+
+// --- Preview (Disarankan menguji dengan data yang lebih beragam untuk sortir) ---
+@Preview(showBackground = true, widthDp = 360, backgroundColor = 0xFFF0F0F0)
 @Composable
 fun TaskScreenPreview() {
     DailyTaskManagerTheme {
         val previewViewModel = remember { TaskViewModel() }
-        // Tambahkan data dummy yang lebih mirip UI target
         LaunchedEffect(Unit) {
-            if (previewViewModel.tasks.isEmpty()) {
-                previewViewModel.addTask("Ngoding terus", LocalDate.now().atTime(10, 0)) // Today
+            if (previewViewModel.totalTasks == 0) { // Gunakan totalTasks untuk memeriksa kekosongan
                 previewViewModel.addTask("Meeting Project", LocalDate.now().plusDays(1).atTime(14, 0)) // Tomorrow
-                previewViewModel.addTask("Beli bahan makanan", LocalDate.now().minusDays(2).atTime(18, 0)) // Yesterday (Example)
-                previewViewModel.addTask("Presentasi Final", LocalDate.now().plusDays(5).atTime(9, 30)) // Friday (example)
-                // Completed Tasks
-                val completed1 = Task(title = "Ngoding", deadline = LocalDate.now().atTime(8, 0), isCompleted = true)
-                val completed2 = Task(title = "Ngoding lagi", deadline = LocalDate.now().atTime(9, 0), isCompleted = true)
-                val completed3 = Task(title = "Push ke Github", deadline = LocalDate.now().minusDays(1).atTime(17,0), isCompleted = true)
-                previewViewModel.tasks.addAll(listOf(completed1, completed2, completed3))
+                previewViewModel.addTask("Presentasi Final", LocalDate.now().plusDays(5).atTime(9, 30)) // Friday
+                previewViewModel.addTask("Ngoding terus", LocalDate.now().atTime(10, 0)) // Today
+                previewViewModel.addTask("Beli bahan makanan", null) // No deadline
+
             }
         }
         TaskAppScreen(taskViewModel = previewViewModel)
